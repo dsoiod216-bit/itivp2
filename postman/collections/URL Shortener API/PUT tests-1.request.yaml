@@ -1,5 +1,8 @@
 $kind: http-request
 name: PUT tests/1
-url: ""
-method: GET
+url: http://localhost:3000/tests/1
+method: PUT
+body:
+  type: json
+  content: '{ "title": "Postman Test (v2)", "passingScore": 75 }'
 order: 4057323125975725

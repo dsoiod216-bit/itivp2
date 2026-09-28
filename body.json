@@ -1,0 +1,23 @@
+{
+  "title": "Основы JavaScript",
+  "description": "Базовый тест по JS",
+  "passingScore": 60,
+  "timeLimit": 600,
+  "questions": [
+    {
+      "question": "Что вернёт typeof null?",
+      "options": ["null", "object", "undefined"],
+      "correctAnswer": 1
+    },
+    {
+      "question": "Как объявить константу?",
+      "options": ["var", "let", "const"],
+      "correctAnswer": 2
+    },
+    {
+      "question": "Какой метод добавляет элемент в конец массива?",
+      "options": ["push", "pop", "shift"],
+      "correctAnswer": 0
+    }
+  ]
+}

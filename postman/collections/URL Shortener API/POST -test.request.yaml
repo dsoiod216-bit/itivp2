@@ -1,5 +1,24 @@
 $kind: http-request
 name: POST /test
-url: ""
-method: GET
+url: http://localhost:3000/tests
+method: POST
+body:
+  type: json
+  content: "{\r
+
+    \  \"title\": \"Postman Test\",\r
+
+    \  \"description\": \"Создан через Postman\",\r
+
+    \  \"passingScore\": 60,\r
+
+    \  \"timeLimit\": 600,\r
+
+    \  \"questions\": [\r
+
+    \    { \"question\": \"2+2=?\", \"options\": [\"3\",\"4\",\"5\"], \"correctAnswer\": 1 }\r
+
+    \  ]\r
+
+    }"
 order: 1452996550553354
