@@ -4,11 +4,9 @@ const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
   class Result extends Model {
     static associate(models) {
-      Result.belongsTo(models.Test, {
-        foreignKey: 'testId',
-        as: 'test'
-      });
-    }
+  Result.belongsTo(models.Test, { foreignKey: 'testId', as: 'test' });
+  Result.belongsTo(models.User, { foreignKey: 'userId', as: 'user' });
+}
   }
   Result.init({
     userName: DataTypes.STRING,

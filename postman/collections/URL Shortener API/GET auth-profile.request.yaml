@@ -1,0 +1,5 @@
+$kind: http-request
+name: GET auth/profile
+url: ""
+method: GET
+order: 4503594157808580

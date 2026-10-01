@@ -1,29 +1,16 @@
 require('dotenv').config();
 const express = require('express');
 const { Test, Question, Result, sequelize } = require('./models');
+const { authenticate, isTeacherOrAdmin } = require('./middleware/auth');
 
 const app = express();
 app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
-const generateCertificate = (userName, testTitle, score, total) => {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let code = 'CERT-';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return {
-    code,
-    userName,
-    testTitle,
-    score: `${score}/${total}`,
-    percentage: Math.round((score / total) * 100),
-    issuedAt: new Date().toISOString()
-  };
-};
+app.use('/auth',  require('./routes/auth'));
+app.use('/admin', require('./routes/admin'));
 
-
-app.get('/tests', async (req, res, next) => {
+app.get('/tests', authenticate, async (req, res, next) => {
   try {
     const tests = await Test.findAll({
       include: [{ model: Question, as: 'questions' }]
@@ -45,8 +32,7 @@ app.get('/tests', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-
-app.get('/tests/:id', async (req, res, next) => {
+app.get('/tests/:id', authenticate, async (req, res, next) => {
   try {
     const test = await Test.findByPk(req.params.id, {
       include: [{ model: Question, as: 'questions' }]
@@ -77,8 +63,7 @@ app.get('/tests/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-
-app.post('/tests', async (req, res, next) => {
+app.post('/tests', authenticate, isTeacherOrAdmin, async (req, res, next) => {
   try {
     const { title, description, questions, passingScore, timeLimit } = req.body;
 
@@ -130,8 +115,7 @@ app.post('/tests', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-
-app.put('/tests/:id', async (req, res, next) => {
+app.put('/tests/:id', authenticate, isTeacherOrAdmin, async (req, res, next) => {
   try {
     const test = await Test.findByPk(req.params.id);
     if (!test) {
@@ -158,8 +142,7 @@ app.put('/tests/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-
-app.delete('/tests/:id', async (req, res, next) => {
+app.delete('/tests/:id', authenticate, isTeacherOrAdmin, async (req, res, next) => {
   try {
     const test = await Test.findByPk(req.params.id);
     if (!test) {
@@ -167,14 +150,29 @@ app.delete('/tests/:id', async (req, res, next) => {
     }
 
     const deleted = { id: test.id, title: test.title };
-    await test.destroy(); // CASCADE удалит вопросы
+    await test.destroy();
 
     res.json({ success: true, message: 'Тест удален', data: deleted });
   } catch (e) { next(e); }
 });
 
+const generateCertificate = (userName, testTitle, score, total) => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let code = 'CERT-';
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return {
+    code,
+    userName,
+    testTitle,
+    score: `${score}/${total}`,
+    percentage: Math.round((score / total) * 100),
+    issuedAt: new Date().toISOString()
+  };
+};
 
-app.post('/tests/:id/submit', async (req, res, next) => {
+app.post('/tests/:id/submit', authenticate, async (req, res, next) => {
   try {
     const test = await Test.findByPk(req.params.id, {
       include: [{ model: Question, as: 'questions' }]
@@ -183,10 +181,9 @@ app.post('/tests/:id/submit', async (req, res, next) => {
       return res.status(404).json({ success: false, error: 'Тест не найден' });
     }
 
-    const { userName, answers } = req.body;
-    if (!userName) {
-      return res.status(400).json({ success: false, error: 'Поле userName обязательно' });
-    }
+    const { answers } = req.body;
+    const userName = req.user.email;
+
     if (!answers || !Array.isArray(answers)) {
       return res.status(400).json({ success: false, error: 'Требуется массив answers' });
     }
@@ -218,6 +215,7 @@ app.post('/tests/:id/submit', async (req, res, next) => {
 
     const saved = await Result.create({
       userName,
+      userId: req.user.id,
       testId: test.id,
       testTitle: test.title,
       correct,
@@ -249,8 +247,7 @@ app.post('/tests/:id/submit', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-
-app.get('/results', async (req, res, next) => {
+app.get('/results', authenticate, async (req, res, next) => {
   try {
     const results = await Result.findAll({ order: [['createdAt', 'DESC']] });
 
@@ -270,7 +267,6 @@ app.get('/results', async (req, res, next) => {
     });
   } catch (e) { next(e); }
 });
-
 
 app.get('/certificates/:code', async (req, res, next) => {
   try {
@@ -294,12 +290,10 @@ app.get('/certificates/:code', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ success: false, error: 'Внутренняя ошибка сервера' });
 });
-
 
 sequelize.authenticate()
   .then(() => {
