@@ -2,7 +2,6 @@ require('dotenv').config();
 const express = require('express');
 const { Test, Question, Result, sequelize } = require('./models');
 const { authenticate, isTeacherOrAdmin } = require('./middleware/auth');
-
 const app = express();
 app.use(express.json());
 const PORT = process.env.PORT || 3000;

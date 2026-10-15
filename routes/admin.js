@@ -2,17 +2,17 @@ const router = require('express').Router();
 const { User } = require('../models');
 const { authenticate, isAdmin } = require('../middleware/auth');
 
-// ---------- GET /admin/users ----------
+
 router.get('/users', authenticate, isAdmin, async (req, res, next) => {
   try {
     const users = await User.findAll({
-      attributes: ['id', 'email', 'role', 'createdAt'] // без passwordHash
+      attributes: ['id', 'email', 'role', 'createdAt'] 
     });
     res.json({ success: true, count: users.length, data: users });
   } catch (e) { next(e); }
 });
 
-// ---------- PUT /admin/users/:id/role ----------
+
 router.put('/users/:id/role', authenticate, isAdmin, async (req, res, next) => {
   try {
     const { role } = req.body;
@@ -44,7 +44,7 @@ router.put('/users/:id/role', authenticate, isAdmin, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// ---------- DELETE /admin/users/:id ----------
+
 router.delete('/users/:id', authenticate, isAdmin, async (req, res, next) => {
   try {
     const user = await User.findByPk(req.params.id);

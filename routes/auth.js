@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const bcrypt = require('bcrypt');         // или require('bcryptjs')
+const bcrypt = require('bcrypt');        
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
 const { authenticate } = require('../middleware/auth');
@@ -14,7 +14,7 @@ const generateToken = (user) => {
   );
 };
 
-// ---------- POST /auth/register ----------
+
 router.post('/register', async (req, res, next) => {
   try {
     const { email, password, role } = req.body;
@@ -66,7 +66,7 @@ router.post('/register', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// ---------- POST /auth/login ----------
+
 router.post('/login', async (req, res, next) => {
   try {
     const { email, password } = req.body;
@@ -80,7 +80,7 @@ router.post('/login', async (req, res, next) => {
 
     const user = await User.findOne({ where: { email } });
 
-    // Одинаковый ответ для «email не найден» и «неверный пароль»
+
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -109,7 +109,7 @@ router.post('/login', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// ---------- GET /auth/profile (защищённый) ----------
+
 router.get('/profile', authenticate, async (req, res, next) => {
   try {
     res.json({
