@@ -1,192 +1,163 @@
 import { useState, useEffect } from 'react';
-import { useLocalStorage } from '../hooks/useLocalStorage';
+import { testsAPI } from '../api';
 import { useDebounce } from '../hooks/useDebounce';
 
-const INITIAL_TESTS = [
-  {
-    id: 1,
-    title: 'Основы JavaScript',
-    description: 'Базовый тест по JS',
-    questionsCount: 5,
-    passingScore: 60,
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 2,
-    title: 'SQL для начинающих',
-    description: 'SELECT и JOIN',
-    questionsCount: 8,
-    passingScore: 70,
-    createdAt: new Date().toISOString()
-  }
-];
-
-export default function TestList() {
-  const [tests, setTests] = useLocalStorage('quiz-tests', INITIAL_TESTS);
+export default function TestList({ user, onLogout }) {
+  const [tests, setTests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [questionsCount, setQuestionsCount] = useState(5);
   const [passingScore, setPassingScore] = useState(60);
   const [editingId, setEditingId] = useState(null);
-  const [filter, setFilter] = useState('');
-  const [sortBy, setSortBy] = useState('newest');
-  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebounce(searchQuery, 500);
 
-const debouncedTitle = useDebounce(title, 500);
-const [draftSaved, setDraftSaved] = useState(false);
-
-useEffect(() => {
-  if (debouncedTitle) {
-    localStorage.setItem('quiz-draft', debouncedTitle);
-    setDraftSaved(true);
-    const t = setTimeout(() => setDraftSaved(false), 1500);
-    return () => clearTimeout(t);
-  }
-}, [debouncedTitle]);
-
-  useEffect(() => {
-    document.title = `Тесты (${tests.length})`;
-  }, [tests.length]);
+  const loadTests = async (search = '') => {
+    setLoading(true);
+    setError(null);
+    try {
+  
+      const res = await testsAPI.getAll(search);
+      setTests(res.data.data);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Не удалось загрузить тесты');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 1000);
-    return () => clearTimeout(timer);
-  }, []);
+    loadTests(debouncedSearch);
+  }, [debouncedSearch]);
 
   const resetForm = () => {
     setTitle('');
     setDescription('');
-    setQuestionsCount(5);
     setPassingScore(60);
     setEditingId(null);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!title.trim()) return;
 
+    const data = {
+      title,
+      description,
+      passingScore: Number(passingScore),
+      timeLimit: 600
+    };
+
     if (editingId) {
-      setTests(tests.map(t =>
-        t.id === editingId
-          ? { ...t, title, description, questionsCount: Number(questionsCount), passingScore: Number(passingScore) }
-          : t
-      ));
+      const old = tests.find(t => t.id === editingId);
+      setTests(tests.map(t => t.id === editingId ? { ...t, ...data } : t));
+      resetForm();
+
+      try {
+        await testsAPI.update(editingId, data);
+        loadTests(debouncedSearch); 
+      } catch (err) {
+        setTests(tests.map(t => t.id === editingId ? old : t));
+        setError(err.response?.data?.error || 'Не удалось обновить тест');
+      }
     } else {
-      const newTest = {
-        id: Date.now(),
-        title,
-        description,
-        questionsCount: Number(questionsCount),
-        passingScore: Number(passingScore),
-        createdAt: new Date().toISOString()
-      };
-      setTests([newTest, ...tests]);
+      const tempId = Date.now();
+      const optimistic = { id: tempId, ...data, createdAt: new Date().toISOString() };
+      setTests([optimistic, ...tests]);
+      resetForm();
+
+      try {
+        const res = await testsAPI.create(data);
+        const created = res.data.data;
+        setTests(prev => prev.map(t => t.id === tempId ? { ...t, ...created } : t));
+      } catch (err) {
+        setTests(prev => prev.filter(t => t.id !== tempId));
+        setError(err.response?.data?.error || 'Не удалось добавить тест');
+      }
     }
-    resetForm();
+  };
+
+  const handleDelete = async (id) => {
+    const removed = tests.find(t => t.id === id);
+    setTests(tests.filter(t => t.id !== id));
+
+    try {
+      await testsAPI.remove(id);
+    } catch (err) {
+      setTests(prev => [removed, ...prev]);
+      setError(err.response?.data?.error || 'Не удалось удалить тест');
+    }
   };
 
   const handleEdit = (test) => {
     setEditingId(test.id);
     setTitle(test.title);
-    setDescription(test.description);
-    setQuestionsCount(test.questionsCount);
+    setDescription(test.description || '');
     setPassingScore(test.passingScore);
   };
 
-  const handleDelete = (id) => {
-    setTests(tests.filter(t => t.id !== id));
-  };
+  if (loading && tests.length === 0) {
+    return <div className="container"><div className="loading">Загрузка тестов...</div></div>;
+  }
 
-  const filtered = tests
-    .filter(t => t.title.toLowerCase().includes(filter.toLowerCase()))
-    .sort((a, b) => {
-      if (sortBy === 'newest') return new Date(b.createdAt) - new Date(a.createdAt);
-      if (sortBy === 'oldest') return new Date(a.createdAt) - new Date(b.createdAt);
-      if (sortBy === 'title') return a.title.localeCompare(b.title);
-      return 0;
-    });
-
-  const stats = {
-    total: tests.length,
-    withQuestions: tests.filter(t => t.questionsCount > 0).length,
-    avgScore: tests.length
-      ? Math.round(tests.reduce((s, t) => s + t.passingScore, 0) / tests.length)
-      : 0
-  };
-
-  if (loading) {
-    return <div className="loading">Загрузка тестов...</div>;
+  if (error && tests.length === 0) {
+    return (
+      <div className="container">
+        <div className="error">
+          {error}
+          <button onClick={() => loadTests(debouncedSearch)}>Повторить</button>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="container">
-      <h1>Платформа онлайн-тестирования</h1>
+      <header className="header">
+        <h1>Платформа онлайн-тестирования</h1>
+        <div className="user-info">
+          <span>{user.email} ({user.role})</span>
+          <button onClick={onLogout} className="btn-logout">Выйти</button>
+        </div>
+      </header>
 
-      <div className="stats">
-        <span>Всего тестов: <b>{stats.total}</b></span>
-        <span>С вопросами: <b>{stats.withQuestions}</b></span>
-        <span>Средний проходной балл: <b>{stats.avgScore}%</b></span>
-      </div>
+      {error && (
+        <div className="error-bar">
+          {error}
+          <button onClick={() => setError(null)}>×</button>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="form">
-        <input
-          type="text"
-          placeholder="Название теста"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
-        <input
-          type="text"
-          placeholder="Описание"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-        <input
-          type="number"
-          placeholder="Вопросов"
-          value={questionsCount}
-          onChange={(e) => setQuestionsCount(e.target.value)}
-        />
-        <input
-          type="number"
-          placeholder="Проходной балл (%)"
-          value={passingScore}
-          onChange={(e) => setPassingScore(e.target.value)}
-        />
-        <button type="submit">
-          {editingId ? 'Сохранить' : 'Добавить'}
-        </button>
-        {editingId && (
-          <button type="button" onClick={resetForm}>Отмена</button>
-        )}
+        <input type="text" placeholder="Название теста" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <input type="text" placeholder="Описание" value={description} onChange={(e) => setDescription(e.target.value)} />
+        <input type="number" placeholder="Проходной балл (%)" value={passingScore} onChange={(e) => setPassingScore(e.target.value)} />
+        <button type="submit">{editingId ? 'Сохранить' : 'Добавить'}</button>
+        {editingId && <button type="button" onClick={resetForm}>Отмена</button>}
       </form>
 
       <div className="controls">
+        {/* Ввод поиска */}
         <input
           type="text"
           placeholder="Поиск по названию..."
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
         />
-        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-          <option value="newest">Сначала новые</option>
-          <option value="oldest">Сначала старые</option>
-          <option value="title">По названию</option>
-        </select>
+        {loading && <span className="searching">Поиск...</span>}
       </div>
 
-      {filtered.length === 0 ? (
+      {tests.length === 0 && !loading ? (
         <p className="empty">Тестов не найдено</p>
       ) : (
         <ul className="list">
-          {filtered.map(test => (
+          {tests.map(test => (
             <li key={test.id} className="item">
               <div>
                 <h3>{test.title}</h3>
                 <p>{test.description}</p>
-                <small>
-                  Вопросов: {test.questionsCount} • Проходной: {test.passingScore}%
-                </small>
+                <small>Проходной: {test.passingScore}%</small>
               </div>
               <div className="actions">
                 <button onClick={() => handleEdit(test)}>✏️</button>

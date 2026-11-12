@@ -1,9 +1,15 @@
 require('dotenv').config();
+const cors = require('cors');
 const express = require('express');
+const { Op } = require('sequelize'); // Вынесли сюда для чистоты
 const { Test, Question, Result, sequelize } = require('./models');
 const { authenticate, isTeacherOrAdmin } = require('./middleware/auth');
+
 const app = express();
+
+app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
 app.use(express.json());
+
 const PORT = process.env.PORT || 3000;
 
 app.use('/auth',  require('./routes/auth'));
@@ -11,7 +17,15 @@ app.use('/admin', require('./routes/admin'));
 
 app.get('/tests', authenticate, async (req, res, next) => {
   try {
+    const { search } = req.query; 
+ 
+    let whereCondition = {};
+    if (search) {
+      whereCondition.title = { [Op.iLike]: `%${search}%` }; 
+    }
+
     const tests = await Test.findAll({
+      where: whereCondition,
       include: [{ model: Question, as: 'questions' }]
     });
 
@@ -69,10 +83,12 @@ app.post('/tests', authenticate, isTeacherOrAdmin, async (req, res, next) => {
     if (!title) {
       return res.status(400).json({ success: false, error: 'Поле title обязательно' });
     }
-    if (!questions || !Array.isArray(questions) || questions.length === 0) {
-      return res.status(400).json({ success: false, error: 'Требуется массив questions (минимум 1 вопрос)' });
-    }
-    for (let q of questions) {
+
+    const questionsData = (questions && Array.isArray(questions) && questions.length > 0) 
+      ? questions 
+      : [{ question: 'Вопрос по умолчанию', options: ['Да', 'Нет'], correctAnswer: 0 }];
+
+    for (let q of questionsData) {
       if (!q.question || !q.options || !Array.isArray(q.options) || q.options.length < 2) {
         return res.status(400).json({ success: false, error: 'Каждый вопрос должен иметь question и options (минимум 2)' });
       }
@@ -85,12 +101,12 @@ app.post('/tests', authenticate, isTeacherOrAdmin, async (req, res, next) => {
       const test = await Test.create({
         title,
         description: description || '',
-        timeLimit: timeLimit || 30,
+        timeLimit: timeLimit || 600,
         passingScore: passingScore || 60
       }, { transaction: t });
 
       await Question.bulkCreate(
-        questions.map(q => ({
+        questionsData.map(q => ({
           question: q.question,
           options: JSON.stringify(q.options),
           correctAnswer: q.correctAnswer,
@@ -108,7 +124,11 @@ app.post('/tests', authenticate, isTeacherOrAdmin, async (req, res, next) => {
       data: {
         id: newTest.id,
         title: newTest.title,
-        questionsCount: questions.length
+        description: newTest.description,
+        passingScore: newTest.passingScore,
+        timeLimit: newTest.timeLimit,
+        questionsCount: questionsData.length,
+        createdAt: newTest.createdAt
       }
     });
   } catch (e) { next(e); }
@@ -136,7 +156,13 @@ app.put('/tests/:id', authenticate, isTeacherOrAdmin, async (req, res, next) => 
     res.json({
       success: true,
       message: 'Тест обновлен',
-      data: { id: test.id, title: test.title }
+      data: { 
+        id: test.id, 
+        title: test.title,
+        description: test.description,
+        passingScore: test.passingScore,
+        timeLimit: test.timeLimit
+      }
     });
   } catch (e) { next(e); }
 });
